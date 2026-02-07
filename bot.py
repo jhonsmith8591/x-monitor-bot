@@ -7,44 +7,43 @@ import telegram
 TOKEN = os.environ['TELEGRAM_TOKEN']
 CHAT_ID = os.environ['TELEGRAM_CHAT_ID']
 
-# 監視したいXのアカウントID（例：BBCWorld）
-TARGET_USER = "BBCWorld" 
+# ニュースサイトのURL
+URL = "https://www.newsnow.co.uk/h/World+News/Middle+East/Iran/US~Iran?type=ln"
 
 async def main():
     async with async_playwright() as p:
         # ブラウザを起動
         browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/5.3.36"
+        )
+        page = await context.new_page()
 
-        # Nitterというサイトを経由してXの投稿を取得（ログイン不要で確実）
-        # いくつかあるミラーサイトの一つを使います
-        nitter_url = f"https://nitter.net/{TARGET_USER}"
-        
-        print(f"Connecting to {nitter_url}...")
+        print(f"Connecting to {URL}...")
         try:
-            await page.goto(nitter_url, timeout=60000)
+            # サイトにアクセス
+            await page.goto(URL, wait_until="networkidle", timeout=60000)
             
-            # 最新の投稿（ツイート内容）を取得
-            # Nitterの画面構成に合わせてテキストを抜き出します
-            tweet_element = await page.query_selector('.tweet-content')
+            # 最新のニュース記事のタイトルを取得
+            # NewsNowのタイトルは 'hll' というクラス名のリンクに入っていることが多いです
+            title_element = await page.query_selector('.hll')
             
-            if tweet_element:
-                tweet_text = await tweet_element.inner_text()
-                print(f"Found: {tweet_text[:30]}...")
+            if title_element:
+                title_text = await title_element.inner_text()
+                print(f"Found News: {title_text}")
 
                 # Telegramに送信
                 bot = telegram.Bot(token=TOKEN)
-                message = f"【{TARGET_USER} の最新投稿】\n\n{tweet_text}"
+                message = f"【US-Iran News Update】\n\n{title_text}"
                 await bot.send_message(chat_id=CHAT_ID, text=message)
-                print("Success!")
+                print("Successfully sent to Telegram!")
             else:
-                print("No tweets found.")
+                print("Could not find any news titles.")
                 
         except Exception as e:
             print(f"Error: {e}")
-            # エラーが起きたことを自分に知らせる（デバッグ用）
             bot = telegram.Bot(token=TOKEN)
-            await bot.send_message(chat_id=CHAT_ID, text=f"取得エラーが発生しました: {e}")
+            await bot.send_message(chat_id=CHAT_ID, text=f"Error occurred: {e}")
 
         await browser.close()
 
