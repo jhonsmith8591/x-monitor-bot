@@ -1,0 +1,26 @@
+name: X Monitor Bot
+on:
+  schedule:
+    - cron: '*/15 * * * *' # 15分おきに自動実行
+  workflow_dispatch: # 手動で動かすボタンを表示
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python_version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install playwright googletrans==4.0.0-rc1 python-telegram-bot
+          playwright install chromium
+      - name: Run bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          X_USER: ${{ secrets.X_USER }}
+          X_PASS: ${{ secrets.X_PASS }}
+        run: python bot.py
