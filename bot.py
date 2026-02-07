@@ -14,36 +14,45 @@ async def main():
     async with async_playwright() as p:
         # ブラウザを起動
         browser = await p.chromium.launch(headless=True)
+        # 人間が操作しているように見せるための設定
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/5.3.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/5.3.36"
         )
         page = await context.new_page()
 
-        print(f"Connecting to {URL}...")
+        print(f"Connecting to NewsNow...")
         try:
-            # サイトにアクセス
-            await page.goto(URL, wait_until="networkidle", timeout=60000)
+            # ページへ移動（読み込みが終わるまで最大60秒待機）
+            await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
             
-            # 最新のニュース記事のタイトルを取得
-            # NewsNowのタイトルは 'hll' というクラス名のリンクに入っていることが多いです
-            title_element = await page.query_selector('.hll')
-            
-            if title_element:
-                title_text = await title_element.inner_text()
-                print(f"Found News: {title_text}")
+            # ニュース記事のカードが表示されるまで最大15秒待つ
+            await page.wait_for_selector('.article-card', timeout=15000)
 
-                # Telegramに送信
+            # 最新の記事タイトルと時間を取得
+            headline_element = await page.query_selector('.article-card__headline')
+            time_element = await page.query_selector('.article-card__time')
+
+            if headline_element:
+                headline_text = await headline_element.inner_text()
+                # 記事へのリンクURLも取得
+                link_url = await headline_element.get_attribute('href')
+                time_text = await time_element.inner_text() if time_element else "Just now"
+
+                print(f"Latest News Found: {headline_text}")
+
+                # Telegramに送信（英語のタイトルと記事URL）
                 bot = telegram.Bot(token=TOKEN)
-                message = f"【US-Iran News Update】\n\n{title_text}"
+                message = f"📰 【Latest News Update】\nTime: {time_text}\n\n{headline_text}\n\nLink: {link_url}"
                 await bot.send_message(chat_id=CHAT_ID, text=message)
                 print("Successfully sent to Telegram!")
             else:
-                print("Could not find any news titles.")
-                
+                print("Could not find the headline.")
+
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error occurred: {e}")
+            # エラーが起きたことも自分に知らせる
             bot = telegram.Bot(token=TOKEN)
-            await bot.send_message(chat_id=CHAT_ID, text=f"Error occurred: {e}")
+            await bot.send_message(chat_id=CHAT_ID, text=f"⚠️ Script Error: {e}")
 
         await browser.close()
 
